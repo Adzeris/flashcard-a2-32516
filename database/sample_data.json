@@ -1,0 +1,35 @@
+{
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@example.com",
+      "role": "admin"
+    },
+    {
+      "username": "student1",
+      "email": "student1@example.com",
+      "role": "user"
+    }
+  ],
+  "flashcards": [
+    {
+      "question": "What is React state?",
+      "answer": "Data that can change over time and trigger UI re-renders.",
+      "category": "Frontend",
+      "difficulty": 2
+    },
+    {
+      "question": "What does JWT stand for?",
+      "answer": "JSON Web Token.",
+      "category": "Security",
+      "difficulty": 1
+    }
+  ],
+  "view_histories": [
+    {
+      "flashcard_question": "What is React state?",
+      "notes": "Need to remember state updates are async.",
+      "was_correct": true
+    }
+  ]
+}
