@@ -29,3 +29,12 @@ CREATE TABLE view_histories (
     FOREIGN KEY (user_id) REFERENCES users (id),
     FOREIGN KEY (flashcard_id) REFERENCES flashcards (id)
 );
+
+CREATE TABLE guest_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL DEFAULT 'Guest Session',
+    flashcards_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TEXT NOT NULL
+);

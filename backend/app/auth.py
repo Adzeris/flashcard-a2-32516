@@ -10,7 +10,8 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-this")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "180"))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use PBKDF2-SHA256 to avoid bcrypt's 72-byte input limitation issues.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -36,6 +36,24 @@ class UserOut(UserBase):
     created_at: datetime
 
 
+class TestCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+
+
+class TestUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+
+
+class TestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    name: str
+    created_at: datetime
+    flashcard_count: int = 0
+
+
 class FlashcardBase(BaseModel):
     question: str = Field(min_length=2)
     answer: str = Field(min_length=1)
@@ -86,4 +104,31 @@ class ViewHistoryOut(ViewHistoryBase):
     user_id: int
     viewed_at: datetime
     flashcard_question: str | None = None
+    flashcard_test: str | None = None
     username: str | None = None
+
+
+class GuestFlashcard(BaseModel):
+    id: str
+    question: str = Field(min_length=2)
+    answer: str = Field(min_length=1)
+    category: str = Field(default="General", min_length=2, max_length=80)
+    difficulty: int = Field(default=1, ge=1, le=5)
+
+
+class GuestSessionCreate(BaseModel):
+    title: str | None = Field(default="Guest Session", max_length=120)
+    expires_in_hours: int = Field(default=12, ge=1, le=72)
+
+
+class GuestSessionUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=120)
+    flashcards: list[GuestFlashcard] | None = None
+
+
+class GuestSessionOut(BaseModel):
+    token: str
+    title: str
+    flashcards: list[GuestFlashcard]
+    created_at: datetime
+    expires_at: datetime

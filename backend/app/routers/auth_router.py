@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..auth import create_access_token, get_password_hash, verify_password
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import User
+from ..models import Test, User
 from ..schemas import Token, UserCreate, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -29,6 +29,11 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    for name in ("Test 1", "Test 2", "Test 3"):
+        db.add(Test(user_id=user.id, name=name))
+    db.commit()
+
     return user
 
 

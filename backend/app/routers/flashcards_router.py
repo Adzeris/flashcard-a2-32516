@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import Flashcard, User
+from ..models import Flashcard, Test, User
 from ..schemas import FlashcardCreate, FlashcardOut, FlashcardUpdate
 
 router = APIRouter(prefix="/api/flashcards", tags=["Flashcards"])
@@ -26,6 +26,7 @@ def _to_flashcard_out(card: Flashcard) -> FlashcardOut:
 @router.get("", response_model=list[FlashcardOut])
 def list_flashcards(
     search: str = Query(default="", max_length=120),
+    test: str = Query(default=""),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -33,16 +34,16 @@ def list_flashcards(
     if current_user.role != "admin":
         q = q.filter(Flashcard.user_id == current_user.id)
 
+    test_name = test.strip()
+    if test_name:
+        q = q.filter(Flashcard.category == test_name)
+
     search_term = search.strip()
     if search_term:
         like = f"%{search_term}%"
-        q = q.filter(
-            (Flashcard.question.ilike(like))
-            | (Flashcard.answer.ilike(like))
-            | (Flashcard.category.ilike(like))
-        )
+        q = q.filter((Flashcard.question.ilike(like)) | (Flashcard.answer.ilike(like)))
 
-    cards = q.order_by(Flashcard.id.desc()).all()
+    cards = q.order_by(Flashcard.id.asc()).all()
     return [_to_flashcard_out(card) for card in cards]
 
 
@@ -56,12 +57,20 @@ def create_flashcard(
     owner = db.query(User).filter(User.id == owner_id).first()
     if owner is None:
         raise HTTPException(status_code=404, detail="Owner user not found")
+    test_name = payload.category.strip()
+    mapped_test = (
+        db.query(Test)
+        .filter(Test.user_id == owner_id, Test.name == test_name)
+        .first()
+    )
+    if mapped_test is None:
+        raise HTTPException(status_code=400, detail="Selected test does not exist")
 
     card = Flashcard(
         user_id=owner_id,
         question=payload.question.strip(),
         answer=payload.answer.strip(),
-        category=payload.category.strip(),
+        category=test_name,
         difficulty=payload.difficulty,
     )
     db.add(card)
@@ -88,7 +97,15 @@ def update_flashcard(
     if payload.answer is not None:
         card.answer = payload.answer.strip()
     if payload.category is not None:
-        card.category = payload.category.strip()
+        test_name = payload.category.strip()
+        mapped_test = (
+            db.query(Test)
+            .filter(Test.user_id == card.user_id, Test.name == test_name)
+            .first()
+        )
+        if mapped_test is None:
+            raise HTTPException(status_code=400, detail="Selected test does not exist")
+        card.category = test_name
     if payload.difficulty is not None:
         card.difficulty = payload.difficulty
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 
 from .database import Base
@@ -18,6 +18,19 @@ class User(Base):
 
     flashcards: Mapped[list["Flashcard"]] = relationship("Flashcard", back_populates="owner")
     histories: Mapped[list["ViewHistory"]] = relationship("ViewHistory", back_populates="user")
+    tests: Mapped[list["Test"]] = relationship("Test", back_populates="user")
+
+
+class Test(Base):
+    __tablename__ = "tests"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_tests_user_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="tests")
 
 
 class Flashcard(Base):
@@ -50,3 +63,14 @@ class ViewHistory(Base):
 
     user: Mapped["User"] = relationship("User", back_populates="histories")
     flashcard: Mapped["Flashcard"] = relationship("Flashcard", back_populates="histories")
+
+
+class GuestSession(Base):
+    __tablename__ = "guest_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False, default="Guest Session")
+    flashcards_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

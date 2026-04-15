@@ -1,22 +1,300 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { apiRequest, authRequest, loginRequest } from "./api";
 
 const initialFlashcardForm = {
   question: "",
   answer: "",
-  category: "General",
   difficulty: 1,
 };
 
-const initialHistoryForm = {
-  flashcard_id: "",
-  notes: "",
-  was_correct: "",
+const initialGuestFlashcardForm = {
+  question: "",
+  answer: "",
+  difficulty: 1,
 };
 
 function formatDate(value) {
   if (!value) return "-";
   return new Date(value).toLocaleString();
+}
+
+function readGuestTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("guest") || "";
+}
+
+function writeGuestTokenToUrl(token) {
+  const url = new URL(window.location.href);
+  if (token) {
+    url.searchParams.set("guest", token);
+  } else {
+    url.searchParams.delete("guest");
+  }
+  window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+
+function shuffleCards(cards) {
+  const list = [...cards];
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+function DifficultyPicker({ value, onChange, disabled = false, name = "difficulty" }) {
+  return (
+    <div className={`difficulty-picker ${disabled ? "is-disabled" : ""}`}>
+      {[1, 2, 3, 4, 5].map((level) => (
+        <button
+          key={`${name}-${level}`}
+          type="button"
+          className={`difficulty-chip ${Number(value) === level ? "active" : ""}`}
+          onClick={() => onChange(level)}
+          disabled={disabled}
+        >
+          {level}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StudyPanel({ panelTitle, sourceCards, onMarkAnswer, isGuestMode = false }) {
+  const [mode, setMode] = useState("practice");
+  const [maxDifficulty, setMaxDifficulty] = useState(5);
+  const [shuffle, setShuffle] = useState(false);
+  const [active, setActive] = useState(false);
+  const [studyCards, setStudyCards] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [examAnswered, setExamAnswered] = useState(0);
+  const [examCorrect, setExamCorrect] = useState(0);
+  const [grading, setGrading] = useState(false);
+  const [studyError, setStudyError] = useState("");
+
+  const currentCard = studyCards[index] || null;
+  const filteredCount = sourceCards.filter(
+    (card) => Number(card.difficulty) <= Number(maxDifficulty)
+  ).length;
+
+  function startSession() {
+    const filtered = sourceCards.filter(
+      (card) => Number(card.difficulty) <= Number(maxDifficulty)
+    );
+    if (filtered.length === 0) {
+      setStudyError("No flashcards match this difficulty range.");
+      return;
+    }
+
+    const nextCards = shuffle ? shuffleCards(filtered) : filtered;
+    setStudyCards(nextCards);
+    setActive(true);
+    setCompleted(false);
+    setIndex(0);
+    setRevealed(false);
+    setExamAnswered(0);
+    setExamCorrect(0);
+    setStudyError("");
+  }
+
+  function nextPractice() {
+    if (!active) return;
+    if (index >= studyCards.length - 1) {
+      setActive(false);
+      setCompleted(true);
+      setRevealed(false);
+      return;
+    }
+    setIndex((prev) => prev + 1);
+    setRevealed(false);
+  }
+
+  function previousPractice() {
+    if (!active) return;
+    setIndex((prev) => Math.max(prev - 1, 0));
+    setRevealed(false);
+  }
+
+  async function handleExamResult(wasCorrect) {
+    if (!active || mode !== "exam" || !currentCard) return;
+    setGrading(true);
+    try {
+      if (onMarkAnswer) {
+        await onMarkAnswer(currentCard, wasCorrect);
+      }
+      const answered = examAnswered + 1;
+      const correct = examCorrect + (wasCorrect ? 1 : 0);
+      setExamAnswered(answered);
+      setExamCorrect(correct);
+
+      if (index >= studyCards.length - 1) {
+        setActive(false);
+        setCompleted(true);
+        setRevealed(false);
+      } else {
+        setIndex((prev) => prev + 1);
+        setRevealed(false);
+      }
+    } catch (_error) {
+      setStudyError("Unable to record this result right now.");
+    } finally {
+      setGrading(false);
+    }
+  }
+
+  function closeSession() {
+    setActive(false);
+    setRevealed(false);
+  }
+
+  const studyModal =
+    active &&
+    currentCard &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div className="study-overlay" role="dialog" aria-modal="true">
+        <div className="study-modal">
+          <div className="study-modal-header">
+            <h3>
+              {mode === "exam" ? "Exam Session" : "Practice Session"}
+              {isGuestMode ? " - Guest Mode" : ""}
+            </h3>
+            <button type="button" onClick={closeSession}>
+              Close
+            </button>
+          </div>
+
+          <p className="study-info">
+            <span>
+              Card {index + 1} / {studyCards.length}
+            </span>
+            <span className="study-difficulty">Difficulty {currentCard.difficulty}</span>
+          </p>
+          <button type="button" className="study-card" onClick={() => setRevealed((prev) => !prev)}>
+            <span className="study-label">
+              {revealed ? "Answer" : "Question"} (click to flip)
+            </span>
+            <span className="study-text">
+              {revealed ? currentCard.answer : currentCard.question}
+            </span>
+          </button>
+
+          {mode === "practice" && (
+            <div className="row">
+              <button type="button" onClick={previousPractice} disabled={index === 0}>
+                Previous
+              </button>
+              <button type="button" onClick={nextPractice}>
+                {index >= studyCards.length - 1 ? "Finish" : "Next"}
+              </button>
+            </div>
+          )}
+
+          {mode === "exam" && (
+            <div className="exam-grade-actions">
+              {!revealed && <p className="exam-grade-prompt">Reveal answer first, then grade it.</p>}
+              {revealed && (
+                <div className="row exam-grade-buttons">
+                  <button
+                    type="button"
+                    className="exam-result-btn right"
+                    onClick={() => handleExamResult(true)}
+                    disabled={grading}
+                  >
+                    Right
+                  </button>
+                  <button
+                    type="button"
+                    className="exam-result-btn wrong"
+                    onClick={() => handleExamResult(false)}
+                    disabled={grading}
+                  >
+                    Wrong
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
+    );
+
+  return (
+    <>
+      <h2>{panelTitle}</h2>
+      <div className="study-controls">
+        <label className="study-field">
+          Difficulty up to
+          <DifficultyPicker
+            value={maxDifficulty}
+            onChange={setMaxDifficulty}
+            disabled={active}
+            name={`${panelTitle}-max`}
+          />
+        </label>
+
+        <div className={`study-mode-group ${active ? "is-disabled" : ""}`}>
+          <span className="study-mode-heading">Mode</span>
+          <label className="study-mode-option">
+            <input
+              type="radio"
+              name={`${panelTitle}-study-mode`}
+              checked={mode === "practice"}
+              onChange={() => setMode("practice")}
+              disabled={active}
+            />
+            Practice
+          </label>
+          <label className="study-mode-option">
+            <input
+              type="radio"
+              name={`${panelTitle}-study-mode`}
+              checked={mode === "exam"}
+              onChange={() => setMode("exam")}
+              disabled={active}
+            />
+            Exam
+          </label>
+        </div>
+
+        <label className={`shuffle-option ${active ? "is-disabled" : ""}`}>
+          <input
+            type="checkbox"
+            checked={shuffle}
+            onChange={(e) => setShuffle(e.target.checked)}
+            disabled={active}
+          />
+          <span className="shuffle-option-text">Shuffle when starting</span>
+        </label>
+
+        <button type="button" className="btn-study-start" onClick={startSession}>
+          {active ? "Restart Session" : "Start Session"}
+        </button>
+      </div>
+
+      <p className="hint">{filteredCount} cards available for this difficulty range.</p>
+      {studyError && <p className="error">{studyError}</p>}
+
+      {studyModal}
+
+      {completed && mode === "practice" && (
+        <p className="success">Practice session complete. You can start another session anytime.</p>
+      )}
+
+      {completed && mode === "exam" && examAnswered > 0 && (
+        <div className="exam-summary">
+          <p className="exam-summary-score">{Math.round((examCorrect / examAnswered) * 100)}%</p>
+          <p className="exam-summary-detail">
+            {examCorrect} correct out of {examAnswered} answers.
+          </p>
+        </div>
+      )}
+    </>
+  );
 }
 
 function App() {
@@ -34,9 +312,14 @@ function App() {
   const [flashcards, setFlashcards] = useState([]);
   const [flashcardForm, setFlashcardForm] = useState(initialFlashcardForm);
   const [editingFlashcardId, setEditingFlashcardId] = useState(null);
+  const [tests, setTests] = useState([]);
+  const [selectedTestId, setSelectedTestId] = useState(null);
+  const [isTestWorkspaceOpen, setIsTestWorkspaceOpen] = useState(false);
+  const [newTestName, setNewTestName] = useState("");
+  const [editingTestId, setEditingTestId] = useState(null);
+  const [editingTestName, setEditingTestName] = useState("");
 
   const [histories, setHistories] = useState([]);
-  const [historyForm, setHistoryForm] = useState(initialHistoryForm);
 
   const [profileForm, setProfileForm] = useState({ username: "", email: "", password: "" });
 
@@ -44,13 +327,59 @@ function App() {
   const [selectedAdminUserId, setSelectedAdminUserId] = useState("");
   const [selectedUserHistory, setSelectedUserHistory] = useState([]);
 
+  const [guestToken, setGuestToken] = useState(() => readGuestTokenFromUrl());
+  const [guestSession, setGuestSession] = useState(null);
+  const [guestFlashcardForm, setGuestFlashcardForm] = useState(initialGuestFlashcardForm);
+  const [guestEditingId, setGuestEditingId] = useState("");
+
   const isAdmin = user?.role === "admin";
+  const isGuestMode = Boolean(guestToken && guestSession);
 
   const availableTabs = useMemo(() => {
     const baseTabs = ["flashcards", "history", "profile"];
     if (isAdmin) baseTabs.push("admin");
     return baseTabs;
   }, [isAdmin]);
+
+  const guestShareUrl = guestToken
+    ? `${window.location.origin}${window.location.pathname}?guest=${guestToken}`
+    : "";
+  const guestCards = guestSession?.flashcards || [];
+  const selectedTest = tests.find((item) => item.id === selectedTestId) || null;
+  const selectedTestName = selectedTest?.name || "";
+  const historyByTest = useMemo(() => {
+    const grouped = {};
+    const testNames = new Set(tests.map((test) => test.name));
+
+    for (const test of tests) {
+      grouped[test.name] = {
+        testName: test.name,
+        attempts: 0,
+        correct: 0,
+        wrong: 0,
+        latestViewedAt: null,
+      };
+    }
+
+    for (const item of histories) {
+      const testName = item.flashcard_test || "Unassigned Test";
+      if (!testNames.has(testName)) continue;
+
+      grouped[testName].attempts += 1;
+      if (item.was_correct === true) grouped[testName].correct += 1;
+      else if (item.was_correct === false) grouped[testName].wrong += 1;
+
+      if (
+        grouped[testName].latestViewedAt === null ||
+        new Date(item.viewed_at).getTime() >
+          new Date(grouped[testName].latestViewedAt).getTime()
+      ) {
+        grouped[testName].latestViewedAt = item.viewed_at;
+      }
+    }
+
+    return Object.values(grouped).sort((a, b) => a.testName.localeCompare(b.testName));
+  }, [histories, tests]);
 
   useEffect(() => {
     if (!token) return;
@@ -67,23 +396,40 @@ function App() {
   }, [token]);
 
   useEffect(() => {
+    if (token || !guestToken) return;
+    loadGuestSessionByToken(guestToken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guestToken, token]);
+
+  useEffect(() => {
     if (!token || !user) return;
     const timer = setTimeout(() => {
       loadFlashcards(search);
     }, 200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, token, user]);
+  }, [search, selectedTestName, token, user]);
 
   useEffect(() => {
     if (!token || !user) return;
-    loadFlashcards();
+    loadTests();
     loadHistories();
     if (isAdmin) {
       loadUsers();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, user, isAdmin]);
+
+  useEffect(() => {
+    setEditingFlashcardId(null);
+    setFlashcardForm(initialFlashcardForm);
+  }, [selectedTestId]);
+
+  useEffect(() => {
+    if (!selectedTestId) {
+      setIsTestWorkspaceOpen(false);
+    }
+  }, [selectedTestId]);
 
   async function withUiFeedback(action, successMessage = "") {
     setLoading(true);
@@ -107,11 +453,105 @@ function App() {
     });
   }
 
+  async function loadGuestSessionByToken(tokenValue) {
+    await withUiFeedback(async () => {
+      const session = await apiRequest(`/api/guest/sessions/${tokenValue}`);
+      setGuestToken(session.token);
+      setGuestSession(session);
+      writeGuestTokenToUrl(session.token);
+    });
+  }
+
+  function leaveGuestMode() {
+    setGuestToken("");
+    setGuestSession(null);
+    setGuestFlashcardForm(initialGuestFlashcardForm);
+    setGuestEditingId("");
+    writeGuestTokenToUrl("");
+  }
+
+  async function enterNewGuestMode() {
+    await withUiFeedback(async () => {
+      const session = await apiRequest("/api/guest/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          title: "Guest Session",
+          expires_in_hours: 12,
+        }),
+      });
+      setGuestToken(session.token);
+      setGuestSession(session);
+      setGuestFlashcardForm(initialGuestFlashcardForm);
+      setGuestEditingId("");
+      writeGuestTokenToUrl(session.token);
+    }, "Guest session created. Share the link to collaborate.");
+  }
+
+  async function saveGuestCards(nextCards, successMessage = "") {
+    await withUiFeedback(async () => {
+      const session = await apiRequest(`/api/guest/sessions/${guestToken}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: guestSession?.title || "Guest Session",
+          flashcards: nextCards,
+        }),
+      });
+      setGuestSession(session);
+    }, successMessage);
+  }
+
+  async function handleGuestFlashcardSubmit(event) {
+    event.preventDefault();
+    if (!guestToken) return;
+
+    const cardPayload = {
+      id: guestEditingId || crypto.randomUUID(),
+      question: guestFlashcardForm.question.trim(),
+      answer: guestFlashcardForm.answer.trim(),
+      difficulty: Number(guestFlashcardForm.difficulty),
+    };
+
+    const nextCards = guestEditingId
+      ? guestCards.map((card) => (card.id === guestEditingId ? cardPayload : card))
+      : [...guestCards, cardPayload];
+
+    await saveGuestCards(nextCards, guestEditingId ? "Guest card updated" : "Guest card created");
+    setGuestFlashcardForm(initialGuestFlashcardForm);
+    setGuestEditingId("");
+  }
+
+  function handleGuestEdit(card) {
+    setGuestEditingId(card.id);
+    setGuestFlashcardForm({
+      question: card.question,
+      answer: card.answer,
+      difficulty: card.difficulty,
+    });
+  }
+
+  async function handleGuestDelete(cardId) {
+    if (!window.confirm("Delete this guest flashcard?")) return;
+    const nextCards = guestCards.filter((card) => card.id !== cardId);
+    await saveGuestCards(nextCards, "Guest card deleted");
+  }
+
+  async function handleCopyGuestLink() {
+    try {
+      await navigator.clipboard.writeText(guestShareUrl);
+      setSuccess("Guest link copied");
+      setGlobalError("");
+    } catch (_error) {
+      setGlobalError("Unable to copy link automatically. Copy it manually.");
+      setSuccess("");
+    }
+  }
+
   async function handleAuthSubmit(event) {
     event.preventDefault();
     if (authMode === "login") {
       await withUiFeedback(async () => {
         const payload = await loginRequest(authForm.username.trim(), authForm.password);
+        leaveGuestMode();
         setToken(payload.access_token);
       }, "Logged in successfully");
       return;
@@ -127,6 +567,7 @@ function App() {
         }),
       });
       const payload = await loginRequest(authForm.username.trim(), authForm.password);
+      leaveGuestMode();
       setToken(payload.access_token);
     }, "Account created and logged in");
   }
@@ -144,17 +585,43 @@ function App() {
     setSearch("");
     setFlashcardForm(initialFlashcardForm);
     setEditingFlashcardId(null);
-    setHistoryForm(initialHistoryForm);
+    setTests([]);
+    setSelectedTestId(null);
+    setIsTestWorkspaceOpen(false);
+    setNewTestName("");
+    setEditingTestId(null);
+    setEditingTestName("");
     setGlobalError("");
     setSuccess("");
   }
 
   async function loadFlashcards(searchTerm = "") {
-    const query = searchTerm.trim()
-      ? `/api/flashcards?search=${encodeURIComponent(searchTerm.trim())}`
-      : "/api/flashcards";
+    if (!selectedTestName) {
+      setFlashcards([]);
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("test", selectedTestName);
+    if (searchTerm.trim()) {
+      params.set("search", searchTerm.trim());
+    }
+    const query = `/api/flashcards?${params.toString()}`;
     const list = await authRequest(query, token);
     setFlashcards(list);
+  }
+
+  async function loadTests(keepSelection = true) {
+    const list = await authRequest("/api/tests", token);
+    setTests(list);
+    setSelectedTestId((current) => {
+      if (keepSelection && current && list.some((item) => item.id === current)) {
+        return current;
+      }
+      return list.length > 0 ? list[0].id : null;
+    });
+    if (list.length === 0) {
+      setIsTestWorkspaceOpen(false);
+    }
   }
 
   async function loadHistories() {
@@ -167,8 +634,76 @@ function App() {
     setUsers(list);
   }
 
+  async function handleCreateTest(event) {
+    event.preventDefault();
+    const name = newTestName.trim();
+    if (!name) return;
+
+    await withUiFeedback(async () => {
+      const created = await authRequest("/api/tests", token, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      await loadTests(false);
+      setSelectedTestId(created.id);
+      setIsTestWorkspaceOpen(false);
+      setNewTestName("");
+    }, "Test created");
+  }
+
+  function openTestWorkspace(testId) {
+    setSelectedTestId(testId);
+    setIsTestWorkspaceOpen(true);
+  }
+
+  async function renameTest(testId, name) {
+    await authRequest(`/api/tests/${testId}`, token, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async function handleSaveTestRename(testId) {
+    const name = editingTestName.trim();
+    if (!name) return;
+    await withUiFeedback(async () => {
+      await renameTest(testId, name);
+      await loadTests(true);
+      await loadHistories();
+      setEditingTestId(null);
+      setEditingTestName("");
+    }, "Test renamed");
+  }
+
+  async function handleDeleteTest(testId, testName) {
+    if (!window.confirm(`Delete ${testName}? This will remove its flashcards and related history.`)) {
+      return;
+    }
+    await withUiFeedback(async () => {
+      await authRequest(`/api/tests/${testId}`, token, { method: "DELETE" });
+      await loadTests(false);
+      await loadHistories();
+    }, "Test deleted");
+  }
+
+  async function handleRenameFromHistory(testName) {
+    const matched = tests.find((item) => item.name === testName);
+    if (!matched) return;
+    const nextName = window.prompt("Rename test", matched.name);
+    if (!nextName) return;
+    await withUiFeedback(async () => {
+      await renameTest(matched.id, nextName.trim());
+      await loadTests(true);
+      await loadHistories();
+    }, "Test renamed");
+  }
+
   async function handleFlashcardSubmit(event) {
     event.preventDefault();
+    if (!selectedTestName) {
+      setGlobalError("Create or select a test first.");
+      return;
+    }
     await withUiFeedback(async () => {
       if (editingFlashcardId) {
         await authRequest(`/api/flashcards/${editingFlashcardId}`, token, {
@@ -176,7 +711,7 @@ function App() {
           body: JSON.stringify({
             question: flashcardForm.question.trim(),
             answer: flashcardForm.answer.trim(),
-            category: flashcardForm.category.trim(),
+            category: selectedTestName,
             difficulty: Number(flashcardForm.difficulty),
           }),
         });
@@ -186,7 +721,7 @@ function App() {
           body: JSON.stringify({
             question: flashcardForm.question.trim(),
             answer: flashcardForm.answer.trim(),
-            category: flashcardForm.category.trim(),
+            category: selectedTestName,
             difficulty: Number(flashcardForm.difficulty),
           }),
         });
@@ -198,11 +733,16 @@ function App() {
   }
 
   function handleFlashcardEdit(card) {
+    if (card.category && card.category !== selectedTestName) {
+      const matched = tests.find((item) => item.name === card.category);
+      if (matched) {
+        setSelectedTestId(matched.id);
+      }
+    }
     setEditingFlashcardId(card.id);
     setFlashcardForm({
       question: card.question,
       answer: card.answer,
-      category: card.category,
       difficulty: card.difficulty,
     });
   }
@@ -214,46 +754,6 @@ function App() {
       await loadFlashcards(search);
       await loadHistories();
     }, "Flashcard deleted");
-  }
-
-  async function handleHistorySubmit(event) {
-    event.preventDefault();
-    await withUiFeedback(async () => {
-      await authRequest("/api/histories", token, {
-        method: "POST",
-        body: JSON.stringify({
-          flashcard_id: Number(historyForm.flashcard_id),
-          notes: historyForm.notes.trim() || null,
-          was_correct:
-            historyForm.was_correct === ""
-              ? null
-              : historyForm.was_correct === "true",
-        }),
-      });
-      setHistoryForm(initialHistoryForm);
-      await loadHistories();
-    }, "Learning history added");
-  }
-
-  async function toggleHistoryAccuracy(item) {
-    await withUiFeedback(async () => {
-      await authRequest(`/api/histories/${item.id}`, token, {
-        method: "PUT",
-        body: JSON.stringify({
-          notes: item.notes,
-          was_correct: item.was_correct === null ? true : !item.was_correct,
-        }),
-      });
-      await loadHistories();
-    }, "History updated");
-  }
-
-  async function handleDeleteHistory(historyId) {
-    if (!window.confirm("Delete this history record?")) return;
-    await withUiFeedback(async () => {
-      await authRequest(`/api/histories/${historyId}`, token, { method: "DELETE" });
-      await loadHistories();
-    }, "History record deleted");
   }
 
   async function handleProfileSave(event) {
@@ -276,14 +776,20 @@ function App() {
     }, "Profile updated");
   }
 
-  async function handleChangeRole(userId, role) {
+  async function handleChangeRole(targetUser) {
+    const nextRole = targetUser.role === "admin" ? "user" : "admin";
+    const successMessage =
+      nextRole === "admin"
+        ? `${targetUser.username} turned into admin`
+        : `${targetUser.username} changed back to user`;
+
     await withUiFeedback(async () => {
-      await authRequest(`/api/users/${userId}`, token, {
+      await authRequest(`/api/users/${targetUser.id}`, token, {
         method: "PUT",
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ role: nextRole }),
       });
       await loadUsers();
-    }, "User role updated");
+    }, successMessage);
   }
 
   async function handleDeleteUser(userId) {
@@ -306,12 +812,139 @@ function App() {
     });
   }
 
+  async function markExamAnswerForUser(card, wasCorrect) {
+    await authRequest("/api/histories", token, {
+      method: "POST",
+      body: JSON.stringify({
+        flashcard_id: card.id,
+        notes: "Exam mode result",
+        was_correct: wasCorrect,
+      }),
+    });
+    await loadHistories();
+  }
+
+  if (isGuestMode && !token) {
+    return (
+      <div className="page">
+        <header className="app-header">
+          <div>
+            <h1>Guest Study Session</h1>
+            <p>
+              Temporary mode. No saved user history, no admin access. Expires at{" "}
+              <strong>{formatDate(guestSession.expires_at)}</strong>.
+            </p>
+          </div>
+          <div className="row">
+            <button type="button" onClick={handleCopyGuestLink}>
+              Copy Share Link
+            </button>
+            <button type="button" onClick={leaveGuestMode}>
+              Back to Login
+            </button>
+          </div>
+        </header>
+
+        <section className="card">
+          <p className="hint">
+            Share link: <code>{guestShareUrl}</code>
+          </p>
+        </section>
+
+        {globalError && <p className="error">{globalError}</p>}
+        {success && <p className="success">{success}</p>}
+
+        <section className="panel-grid">
+          <div className="card">
+            <h2>{guestEditingId ? "Edit Guest Flashcard" : "Create Guest Flashcard"}</h2>
+            <form onSubmit={handleGuestFlashcardSubmit} className="form-grid">
+              <label>
+                Question
+                <textarea
+                  value={guestFlashcardForm.question}
+                  onChange={(e) =>
+                    setGuestFlashcardForm((prev) => ({ ...prev, question: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Answer
+                <textarea
+                  value={guestFlashcardForm.answer}
+                  onChange={(e) =>
+                    setGuestFlashcardForm((prev) => ({ ...prev, answer: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Difficulty (1-5)
+                <DifficultyPicker
+                  value={guestFlashcardForm.difficulty}
+                  onChange={(level) =>
+                    setGuestFlashcardForm((prev) => ({
+                      ...prev,
+                      difficulty: level,
+                    }))
+                  }
+                  name="guest-form"
+                />
+              </label>
+              <div className="row">
+                <button type="submit" disabled={loading}>
+                  {guestEditingId ? "Update" : "Create"}
+                </button>
+                {guestEditingId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGuestEditingId("");
+                      setGuestFlashcardForm(initialGuestFlashcardForm);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <div className="card">
+            <h2>Guest Flashcards</h2>
+            <div className="list">
+              {guestCards.length === 0 && <p>No guest cards yet.</p>}
+              {guestCards.map((card) => (
+                <article key={card.id} className="list-item">
+                  <h3>{card.question}</h3>
+                  <p>{card.answer}</p>
+                  <p className="meta">Difficulty {card.difficulty}</p>
+                  <div className="row">
+                    <button type="button" onClick={() => handleGuestEdit(card)}>
+                      Edit
+                    </button>
+                    <button type="button" onClick={() => handleGuestDelete(card.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="card">
+          <StudyPanel panelTitle="Guest Practice and Exam" sourceCards={guestCards} isGuestMode />
+        </section>
+      </div>
+    );
+  }
+
   if (!token || !user) {
     return (
       <div className="page page-auth">
         <div className="card auth-card">
           <h1>Flashcard Learning App v2</h1>
-          <p>Assignment 2: JWT auth + CRUD for Users, Flashcards, and View History.</p>
 
           <div className="switch-row">
             <button
@@ -325,6 +958,9 @@ function App() {
               onClick={() => setAuthMode("register")}
             >
               Register
+            </button>
+            <button type="button" onClick={enterNewGuestMode}>
+              Continue as Guest
             </button>
           </div>
 
@@ -362,9 +998,6 @@ function App() {
             </button>
           </form>
 
-          <p className="hint">
-            Default admin: <code>admin</code> / <code>admin123</code>
-          </p>
           {globalError && <p className="error">{globalError}</p>}
           {success && <p className="success">{success}</p>}
         </div>
@@ -400,179 +1033,242 @@ function App() {
       {success && <p className="success">{success}</p>}
 
       {tab === "flashcards" && (
-        <section className="panel-grid">
-          <div className="card">
-            <h2>{editingFlashcardId ? "Edit Flashcard" : "Create Flashcard"}</h2>
-            <form onSubmit={handleFlashcardSubmit} className="form-grid">
-              <label>
-                Question
-                <textarea
-                  value={flashcardForm.question}
-                  onChange={(e) =>
-                    setFlashcardForm((prev) => ({ ...prev, question: e.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Answer
-                <textarea
-                  value={flashcardForm.answer}
-                  onChange={(e) =>
-                    setFlashcardForm((prev) => ({ ...prev, answer: e.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Category
+        <>
+          {!isTestWorkspaceOpen && (
+            <section className="card">
+              <h2>Flashcards</h2>
+              <form onSubmit={handleCreateTest} className="test-form-row">
                 <input
-                  value={flashcardForm.category}
-                  onChange={(e) =>
-                    setFlashcardForm((prev) => ({ ...prev, category: e.target.value }))
-                  }
-                  required
+                  placeholder="New test name"
+                  value={newTestName}
+                  onChange={(e) => setNewTestName(e.target.value)}
                 />
-              </label>
-              <label>
-                Difficulty (1-5)
-                <input
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={flashcardForm.difficulty}
-                  onChange={(e) =>
-                    setFlashcardForm((prev) => ({
-                      ...prev,
-                      difficulty: Number(e.target.value),
-                    }))
-                  }
-                  required
-                />
-              </label>
-              <div className="row">
                 <button type="submit" disabled={loading}>
-                  {editingFlashcardId ? "Update" : "Create"}
+                  Add Test
                 </button>
-                {editingFlashcardId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingFlashcardId(null);
-                      setFlashcardForm(initialFlashcardForm);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
+              </form>
 
-          <div className="card">
-            <h2>Flashcards</h2>
-            <input
-              placeholder="Live search by question, answer, category..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="list">
-              {flashcards.length === 0 && <p>No flashcards found.</p>}
-              {flashcards.map((card) => (
-                <article key={card.id} className="list-item">
-                  <h3>{card.question}</h3>
-                  <p>{card.answer}</p>
-                  <p className="meta">
-                    {card.category} | Difficulty {card.difficulty} | Owner:{" "}
-                    {card.owner_username || card.user_id}
-                  </p>
-                  <div className="row">
-                    <button type="button" onClick={() => handleFlashcardEdit(card)}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => handleDeleteFlashcard(card.id)}>
-                      Delete
-                    </button>
+              <div className="list">
+                {tests.length === 0 && (
+                  <p className="hint">No tests yet. Add one to start creating flashcards.</p>
+                )}
+                {tests.map((testItem) => (
+                  <article key={testItem.id} className="list-item">
+                    {editingTestId === testItem.id ? (
+                      <div className="form-grid">
+                        <input
+                          value={editingTestName}
+                          onChange={(e) => setEditingTestName(e.target.value)}
+                          placeholder="Test name"
+                        />
+                        <div className="row">
+                          <button type="button" onClick={() => handleSaveTestRename(testItem.id)}>
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTestId(null);
+                              setEditingTestName("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3>{testItem.name}</h3>
+                        <p className="meta">{testItem.flashcard_count} flashcards</p>
+                        <div className="row">
+                          <button
+                            type="button"
+                            className={`test-chip ${selectedTestId === testItem.id ? "active" : ""}`}
+                            onClick={() => openTestWorkspace(testItem.id)}
+                          >
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTestId(testItem.id);
+                              setEditingTestName(testItem.name);
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTest(testItem.id, testItem.name)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {isTestWorkspaceOpen && selectedTestName && (
+            <>
+              <section className="card test-workspace-header">
+                <div>
+                  <h2>{selectedTestName}</h2>
+                  <p className="hint">Create questions and run practice/exam for this test.</p>
+                </div>
+                <button type="button" onClick={() => setIsTestWorkspaceOpen(false)}>
+                  Back to Test List
+                </button>
+              </section>
+
+              <section className="panel-grid">
+                <div className="card">
+                  <h2>
+                    {editingFlashcardId
+                      ? `Edit ${selectedTestName}`
+                      : `Create in ${selectedTestName}`}
+                  </h2>
+                  <form onSubmit={handleFlashcardSubmit} className="form-grid">
+                    <label>
+                      Question
+                      <textarea
+                        value={flashcardForm.question}
+                        onChange={(e) =>
+                          setFlashcardForm((prev) => ({ ...prev, question: e.target.value }))
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      Answer
+                      <textarea
+                        value={flashcardForm.answer}
+                        onChange={(e) =>
+                          setFlashcardForm((prev) => ({ ...prev, answer: e.target.value }))
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      Difficulty (1-5)
+                      <DifficultyPicker
+                        value={flashcardForm.difficulty}
+                        onChange={(level) =>
+                          setFlashcardForm((prev) => ({
+                            ...prev,
+                            difficulty: level,
+                          }))
+                        }
+                        name="user-form"
+                      />
+                    </label>
+                    <div className="row">
+                      <button type="submit" disabled={loading}>
+                        {editingFlashcardId ? "Update" : "Create"}
+                      </button>
+                      {editingFlashcardId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingFlashcardId(null);
+                            setFlashcardForm(initialFlashcardForm);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                </div>
+
+                <div className="card">
+                  <h2>{selectedTestName} Questions</h2>
+                  <input
+                    placeholder="Live search by question or answer..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="list">
+                    {flashcards.length === 0 && <p>No flashcards found.</p>}
+                    {flashcards.map((card) => (
+                      <article key={card.id} className="list-item">
+                        <h3>{card.question}</h3>
+                        <p>{card.answer}</p>
+                        <p className="meta">
+                          Difficulty {card.difficulty} | Owner: {card.owner_username || card.user_id}
+                        </p>
+                        <div className="row">
+                          <button type="button" onClick={() => handleFlashcardEdit(card)}>
+                            Edit
+                          </button>
+                          <button type="button" onClick={() => handleDeleteFlashcard(card.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
+                </div>
+              </section>
+
+              <section className="card">
+                <StudyPanel
+                  panelTitle="Practice and Exam"
+                  sourceCards={flashcards}
+                  onMarkAnswer={markExamAnswerForUser}
+                />
+              </section>
+            </>
+          )}
+        </>
       )}
 
       {tab === "history" && (
-        <section className="panel-grid">
-          <div className="card">
-            <h2>Add Learning Record</h2>
-            <form onSubmit={handleHistorySubmit} className="form-grid">
-              <label>
-                Flashcard
-                <select
-                  value={historyForm.flashcard_id}
-                  onChange={(e) =>
-                    setHistoryForm((prev) => ({ ...prev, flashcard_id: e.target.value }))
-                  }
-                  required
-                >
-                  <option value="">Select flashcard</option>
-                  {flashcards.map((card) => (
-                    <option key={card.id} value={card.id}>
-                      {card.question}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Notes
-                <textarea
-                  value={historyForm.notes}
-                  onChange={(e) => setHistoryForm((prev) => ({ ...prev, notes: e.target.value }))}
-                />
-              </label>
-              <label>
-                Correct?
-                <select
-                  value={historyForm.was_correct}
-                  onChange={(e) =>
-                    setHistoryForm((prev) => ({ ...prev, was_correct: e.target.value }))
-                  }
-                >
-                  <option value="">Not set</option>
-                  <option value="true">Yes</option>
-                  <option value="false">No</option>
-                </select>
-              </label>
-              <button type="submit" disabled={loading}>
-                Save record
-              </button>
-            </form>
-          </div>
+        <section className="card">
+          <h2>My Test History</h2>
+          <p className="hint">Shows summary by test only.</p>
+          <div className="list">
+            {historyByTest.length === 0 && <p>No history records yet.</p>}
+            {historyByTest.map((item) => {
+              const graded = item.correct + item.wrong;
+              const accuracy = graded > 0 ? Math.round((item.correct / graded) * 100) : null;
 
-          <div className="card">
-            <h2>My View History</h2>
-            <div className="list">
-              {histories.length === 0 && <p>No history records yet.</p>}
-              {histories.map((item) => (
-                <article key={item.id} className="list-item">
-                  <h3>{item.flashcard_question || `Flashcard #${item.flashcard_id}`}</h3>
-                  <p>{item.notes || "No notes"}</p>
+              return (
+                <article key={item.testName} className="list-item">
+                  <h3>{item.testName}</h3>
                   <p className="meta">
-                    Correct:{" "}
-                    {item.was_correct === null ? "Unknown" : item.was_correct ? "Yes" : "No"} |{" "}
-                    {formatDate(item.viewed_at)}
+                    Attempts: {item.attempts} | Latest: {formatDate(item.latestViewedAt)}
                   </p>
-                  <div className="row">
-                    <button type="button" onClick={() => toggleHistoryAccuracy(item)}>
-                      Toggle Correct
-                    </button>
-                    <button type="button" onClick={() => handleDeleteHistory(item.id)}>
-                      Delete
-                    </button>
-                  </div>
+                  <p className="meta">
+                    Correct: {item.correct} | Wrong: {item.wrong}
+                  </p>
+                  <p className="meta">
+                    Accuracy: {accuracy === null ? "No graded answers yet" : `${accuracy}%`}
+                  </p>
+                  {tests.some((testItem) => testItem.name === item.testName) && (
+                    <div className="row">
+                      <button type="button" onClick={() => handleRenameFromHistory(item.testName)}>
+                        Rename Test
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const matched = tests.find((t) => t.name === item.testName);
+                          if (matched) {
+                            handleDeleteTest(matched.id, matched.name);
+                          }
+                        }}
+                      >
+                        Delete Test
+                      </button>
+                    </div>
+                  )}
                 </article>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -634,11 +1330,9 @@ function App() {
                   <div className="row">
                     <button
                       type="button"
-                      onClick={() =>
-                        handleChangeRole(item.id, item.role === "admin" ? "user" : "admin")
-                      }
+                      onClick={() => handleChangeRole(item)}
                     >
-                      Toggle Role
+                      {item.role === "admin" ? "Change to User" : "Change to Admin"}
                     </button>
                     <button type="button" onClick={() => handleLoadSelectedUserHistory(item.id)}>
                       View History
@@ -661,7 +1355,7 @@ function App() {
             <div className="list">
               {selectedUserHistory.map((item) => (
                 <article key={item.id} className="list-item">
-                  <h3>{item.flashcard_question || `Flashcard #${item.flashcard_id}`}</h3>
+                  <h3>{item.flashcard_test || "Unassigned Test"}</h3>
                   <p>{item.notes || "No notes"}</p>
                   <p className="meta">
                     Correct:{" "}

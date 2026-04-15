@@ -18,6 +18,7 @@ def _to_history_out(item: ViewHistory) -> ViewHistoryOut:
         was_correct=item.was_correct,
         viewed_at=item.viewed_at,
         flashcard_question=item.flashcard.question if item.flashcard else None,
+        flashcard_test=item.flashcard.category if item.flashcard else None,
         username=item.user.username if item.user else None,
     )
 

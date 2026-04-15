@@ -1,11 +1,31 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4533";
+
+function toReadableError(detail) {
+  if (!detail) return "Something went wrong";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const first = detail[0];
+    if (typeof first === "string") return first;
+    if (first && typeof first === "object") {
+      if (typeof first.msg === "string") return first.msg;
+      return JSON.stringify(first);
+    }
+    return "Request validation failed";
+  }
+  if (typeof detail === "object") {
+    if (typeof detail.msg === "string") return detail.msg;
+    if (typeof detail.message === "string") return detail.message;
+    return JSON.stringify(detail);
+  }
+  return String(detail);
+}
 
 async function parseResponse(response) {
   if (!response.ok) {
     let message = "Something went wrong";
     try {
       const body = await response.json();
-      message = body.detail || message;
+      message = toReadableError(body.detail ?? body);
     } catch (_error) {
       // Keep fallback error message.
     }
