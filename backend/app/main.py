@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -16,10 +18,15 @@ from .routers import (
 
 app = FastAPI(title="Flashcard Learning App v2", version="2.0.0")
 
+# CORS: dev frontend lives on a different port (5000) than this API (4533),
+# so the browser would otherwise block fetches. We don't use cookies for
+# auth (it's a Bearer token in headers), so allow_credentials stays False
+# which lets us safely keep allow_origins="*" for local dev.
+allowed_origins = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[origin.strip() for origin in allowed_origins if origin.strip()],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -28,10 +35,14 @@ app.add_middleware(
 def seed_default_admin(db: Session) -> None:
     admin = db.query(User).filter(User.role == "admin").first()
     if not admin:
+        # The default password is only for first-run convenience so the marker
+        # has something to log in with. Override via ADMIN_DEFAULT_PASSWORD
+        # env var in any non-trivial deployment.
+        default_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
         admin = User(
             username="admin",
             email="admin@example.com",
-            hashed_password=get_password_hash("admin123"),
+            hashed_password=get_password_hash(default_password),
             role="admin",
         )
         db.add(admin)
