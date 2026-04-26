@@ -484,6 +484,11 @@ code {
   line-height: 1.45;
 }
 
+/* Space between the flip card and Previous/Next in practice mode */
+.study-modal .study-card + .row {
+  margin-top: 1.35rem;
+}
+
 .exam-grade-actions {
   margin-top: 0.95rem;
   text-align: center;
