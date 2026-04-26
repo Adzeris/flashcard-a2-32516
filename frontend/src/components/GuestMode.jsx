@@ -151,7 +151,7 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
 
         <div className="card">
           <h2>Guest Flashcards</h2>
-          <div className="list">
+          <div className="list list-scroll">
             {cards.length === 0 && <p>No guest cards yet.</p>}
             {cards.map((card) => (
               <article key={card.id} className="list-item">

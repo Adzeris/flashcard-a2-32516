@@ -164,7 +164,7 @@ function TestWorkspace({ token, test, onBack, onChanged, ui }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <div className="list">
+          <div className="list list-scroll">
             {flashcards.length === 0 && <p>No flashcards found.</p>}
             {flashcards.map((card) => (
               <article key={card.id} className="list-item">
