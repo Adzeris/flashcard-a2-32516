@@ -154,10 +154,6 @@ Other things: SQLite `flashcards_v2.db` is created on first run, so `git rm` it 
 
 If something breaks, check the backend is running first, then look at the error text on the page (errors are surfaced from `api.js` instead of crashing the UI to a blank screen).
 
-## Workload allocation
-
-This was done solo. Everything in this repo was written by **MD Saadman Kabir (25502701)**.
-
 | Area                                  | Files                                                                                                                |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Backend (auth, models, all routers)   | `backend/app/*.py`, `backend/app/routers/*.py`                                                                       |
