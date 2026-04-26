@@ -181,6 +181,10 @@ button.active,
   flex-wrap: wrap;
 }
 
+.global-search-results {
+  margin-bottom: 1rem;
+}
+
 .test-form-row {
   display: flex;
   gap: 0.55rem;

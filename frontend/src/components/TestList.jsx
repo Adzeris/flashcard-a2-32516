@@ -1,11 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { authRequest } from "../api";
 
 // Shows all of the user's tests with create/rename/delete/open buttons.
 // "Open" is what switches the parent into the per-test workspace view.
-function TestList({ tests, loading, onCreate, onOpen, onRename, onDelete }) {
+// Global search hits GET /api/flashcards?search=... with no test filter (all decks).
+function TestList({
+  tests,
+  loading,
+  token,
+  onCreate,
+  onOpen,
+  onOpenAndEdit,
+  onRename,
+  onDelete,
+}) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [globalHits, setGlobalHits] = useState([]);
+  const [globalLoading, setGlobalLoading] = useState(false);
+
+  useEffect(() => {
+    const q = globalQuery.trim();
+    if (!q || !token) {
+      setGlobalHits([]);
+      setGlobalLoading(false);
+      return undefined;
+    }
+    setGlobalLoading(true);
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams();
+      params.set("search", q);
+      authRequest(`/api/flashcards?${params.toString()}`, token)
+        .then((rows) => {
+          setGlobalHits(rows);
+          setGlobalLoading(false);
+        })
+        .catch(() => {
+          setGlobalHits([]);
+          setGlobalLoading(false);
+        });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [globalQuery, token]);
+
+  function testIdForCard(card) {
+    return tests.find((t) => t.name === card.category)?.id ?? null;
+  }
 
   async function submitCreate(event) {
     event.preventDefault();
@@ -26,6 +68,52 @@ function TestList({ tests, loading, onCreate, onOpen, onRename, onDelete }) {
   return (
     <section className="card">
       <h2>Flashcards</h2>
+      <label>
+        Universal search
+        <input
+          placeholder="Search every test for a question or answer..."
+          value={globalQuery}
+          onChange={(e) => setGlobalQuery(e.target.value)}
+          autoComplete="off"
+        />
+      </label>
+      {globalLoading && globalQuery.trim() && <p className="hint">Searching…</p>}
+      {globalQuery.trim() && !globalLoading && (
+        <div className="list list-scroll global-search-results">
+          {globalHits.length === 0 && <p className="hint">No matches.</p>}
+          {globalHits.map((card) => {
+            const tid = testIdForCard(card);
+            return (
+              <article key={card.id} className="list-item">
+                <h3>{card.question}</h3>
+                <p>{card.answer}</p>
+                <p className="meta">
+                  Test: {card.category} · Difficulty {card.difficulty}
+                  {card.owner_username ? ` · ${card.owner_username}` : ""}
+                </p>
+                <div className="row">
+                  <button
+                    type="button"
+                    disabled={tid == null}
+                    title={tid == null ? "No matching test in your list" : undefined}
+                    onClick={() => tid != null && onOpen(tid)}
+                  >
+                    Open test
+                  </button>
+                  <button
+                    type="button"
+                    disabled={tid == null}
+                    onClick={() => tid != null && onOpenAndEdit(tid, card)}
+                  >
+                    Edit
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
       <form onSubmit={submitCreate} className="test-form-row">
         <input
           placeholder="New test name"

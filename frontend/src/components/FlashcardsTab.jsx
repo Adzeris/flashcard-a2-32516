@@ -8,6 +8,7 @@ import { authRequest } from "../api";
 function FlashcardsTab({ token, ui, onTestsChanged }) {
   const [tests, setTests] = useState([]);
   const [openTestId, setOpenTestId] = useState(null);
+  const [preselectCard, setPreselectCard] = useState(null);
 
   async function loadTests(keepOpen = true) {
     const list = await authRequest("/api/tests", token);
@@ -63,7 +64,12 @@ function FlashcardsTab({ token, ui, onTestsChanged }) {
         token={token}
         test={openTest}
         ui={ui}
-        onBack={() => setOpenTestId(null)}
+        preselectCard={preselectCard}
+        onPreselectConsumed={() => setPreselectCard(null)}
+        onBack={() => {
+          setPreselectCard(null);
+          setOpenTestId(null);
+        }}
         onChanged={() => loadTests(true)}
       />
     );
@@ -72,9 +78,17 @@ function FlashcardsTab({ token, ui, onTestsChanged }) {
   return (
     <TestList
       tests={tests}
+      token={token}
       loading={ui.loading}
       onCreate={handleCreate}
-      onOpen={setOpenTestId}
+      onOpen={(id) => {
+        setPreselectCard(null);
+        setOpenTestId(id);
+      }}
+      onOpenAndEdit={(testId, card) => {
+        setOpenTestId(testId);
+        setPreselectCard(card);
+      }}
       onRename={handleRename}
       onDelete={handleDelete}
     />

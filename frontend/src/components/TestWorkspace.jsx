@@ -7,7 +7,8 @@ const emptyForm = { question: "", answer: "", difficulty: 1 };
 
 // CRUD form + live-search list + study panel for a single test.
 // Live search is debounced 200ms so we don't hammer the backend on every keystroke.
-function TestWorkspace({ token, test, onBack, onChanged, ui }) {
+// preselectCard: optional card to open in the editor (e.g. jumped from global search).
+function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPreselectConsumed }) {
   const [search, setSearch] = useState("");
   const [flashcards, setFlashcards] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -77,6 +78,20 @@ function TestWorkspace({ token, test, onBack, onChanged, ui }) {
       difficulty: card.difficulty,
     });
   }
+
+  // After cards load for this test, apply a one-off jump from the "search all tests" list.
+  useEffect(() => {
+    if (!preselectCard) return;
+    const match = flashcards.find((c) => c.id === preselectCard.id);
+    if (!match) return;
+    setEditingId(match.id);
+    setForm({
+      question: match.question,
+      answer: match.answer,
+      difficulty: match.difficulty,
+    });
+    onPreselectConsumed?.();
+  }, [flashcards, preselectCard, onPreselectConsumed]);
 
   async function handleDelete(cardId) {
     if (!window.confirm("Delete this flashcard?")) return;
