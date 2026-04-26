@@ -7,3 +7,5 @@ backend/flashcards_v2.db
 frontend/node_modules/
 frontend/dist/
 .DS_Store
+.commit.ps1
+
