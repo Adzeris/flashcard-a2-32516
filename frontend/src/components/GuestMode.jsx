@@ -78,7 +78,7 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
   }
 
   return (
-    <div className="page">
+    <div className="page guest-layout">
       <header className="app-header">
         <div>
           <h1>Guest Study Session</h1>

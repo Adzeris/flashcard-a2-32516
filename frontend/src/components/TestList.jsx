@@ -68,18 +68,19 @@ function TestList({
   return (
     <section className="card">
       <h2>Flashcards</h2>
-      <label>
-        Universal search
-        <input
-          placeholder="Search every test for a question or answer..."
-          value={globalQuery}
-          onChange={(e) => setGlobalQuery(e.target.value)}
-          autoComplete="off"
-        />
-      </label>
-      {globalLoading && globalQuery.trim() && <p className="hint">Searching…</p>}
-      {globalQuery.trim() && !globalLoading && (
-        <div className="list list-scroll global-search-results">
+      <div className="test-list-search-section">
+        <label>
+          Universal search
+          <input
+            placeholder="Search every test for a question or answer..."
+            value={globalQuery}
+            onChange={(e) => setGlobalQuery(e.target.value)}
+            autoComplete="off"
+          />
+        </label>
+        {globalLoading && globalQuery.trim() && <p className="hint test-list-search-hint">Searching…</p>}
+        {globalQuery.trim() && !globalLoading && (
+          <div className="list list-scroll global-search-results">
           {globalHits.length === 0 && <p className="hint">No matches.</p>}
           {globalHits.map((card) => {
             const tid = testIdForCard(card);
@@ -111,10 +112,11 @@ function TestList({
               </article>
             );
           })}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      <form onSubmit={submitCreate} className="test-form-row">
+      <form onSubmit={submitCreate} className="test-form-row test-list-add-form">
         <input
           placeholder="New test name"
           value={newName}
@@ -123,7 +125,7 @@ function TestList({
         <button type="submit" disabled={loading}>Add Test</button>
       </form>
 
-      <div className="list">
+      <div className="list test-list-decks">
         {tests.length === 0 && (
           <p className="hint">No tests yet. Add one to start creating flashcards.</p>
         )}

@@ -46,6 +46,7 @@ function App() {
     setGuestToken("");
     setGuestSession(null);
     writeGuestTokenToUrl("");
+    ui.reset();
   }
 
   async function startGuestSession() {
@@ -56,7 +57,7 @@ function App() {
       });
       setGuestSession(session);
       setGuestToken(session.token);
-    }, "Guest session created. Share the link to collaborate.");
+    });
   }
 
   async function handleLogin(username, password) {
