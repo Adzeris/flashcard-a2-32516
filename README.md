@@ -2,7 +2,11 @@
 
 MD Saadman Kabir, ID: 25502701, FEIT
 
-This is the same flashcard idea from assignment 1, just bigger: now there are users, login, an admin section, and per-user history on top of the flashcards.
+This is the same flashcard idea from assignment 1, just bigger: now there are users, login, an admin section, and per-user history on top of the flashcards. So you sign up, make a few decks (called "tests" in here), put cards in them, study them in practice or exam mode, and the history tab shows how you've been doing. Admin can poke around other users.
+
+## Who did what
+
+I did this one solo, so all the files here are mine.
 
 ## What is used
 
@@ -101,6 +105,8 @@ You do **not** need to install MongoDB or any database server. SQLite ships with
 
 There are two PowerShell scripts at the repo root that do everything for you, but here are the steps in case you want to run them manually.
 
+If you actually wanted to host this somewhere real, copy `backend/.env.example` to `backend/.env` first and put a proper `SECRET_KEY` in it (otherwise it falls back to a dev placeholder, which is fine for local marking but not for anything else).
+
 **Terminal 1 — backend** (from the repo root):
 
 ```powershell
@@ -161,7 +167,7 @@ If something breaks, check the backend is running first, then look at the error 
 | Frontend components (per feature)     | `frontend/src/components/*.jsx`                                                                                      |
 | Styles                                | `frontend/src/index.css`                                                                                             |
 | Database schema + sample data         | `database/schema.sql`, `database/sample_data.json`                                                                   |
-| Docs and run scripts                  | `README.md`, `answers.txt`, `start-backend.ps1`, `start-frontend.ps1`                                                |
+| Docs and run scripts                  | `README.md`, `start-backend.ps1`, `start-frontend.ps1`                                                |
 
 ## Extra
 
