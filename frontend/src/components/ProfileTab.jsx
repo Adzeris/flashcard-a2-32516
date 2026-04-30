@@ -4,28 +4,47 @@ import { authRequest } from "../api";
 // Profile edit form. Password is optional - we only send it if the user
 // actually typed a new one, otherwise the backend leaves the hash alone.
 function ProfileTab({ token, user, ui, onSaved }) {
-  const [form, setForm] = useState({ username: "", email: "", password: "" });
+  const [form, setForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
   useEffect(() => {
-    setForm({ username: user.username, email: user.email, password: "" });
+    setForm({
+      username: user.username,
+      email: user.email,
+      password: "",
+      confirmPassword: "",
+    });
   }, [user]);
 
   async function handleSubmit(event) {
     event.preventDefault();
+    const password = form.password.trim();
+    const confirmPassword = form.confirmPassword.trim();
+
+    if ((password || confirmPassword) && password !== confirmPassword) {
+      ui.setError("Passwords do not match");
+      ui.setSuccess("");
+      return;
+    }
+
     await ui.run(async () => {
       const payload = {
         username: form.username.trim(),
         email: form.email.trim(),
       };
-      if (form.password.trim()) {
-        payload.password = form.password.trim();
+      if (password) {
+        payload.password = password;
       }
       await authRequest("/api/users/me", token, {
         method: "PUT",
         body: JSON.stringify(payload),
       });
       await onSaved?.();
-      setForm((prev) => ({ ...prev, password: "" }));
+      setForm((prev) => ({ ...prev, password: "", confirmPassword: "" }));
     }, "Profile updated");
   }
 
@@ -57,6 +76,14 @@ function ProfileTab({ token, user, ui, onSaved }) {
               type="password"
               value={form.password}
               onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+            />
+          </label>
+          <label>
+            Confirm New Password
+            <input
+              type="password"
+              value={form.confirmPassword}
+              onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
             />
           </label>
           <button type="submit" disabled={ui.loading}>Save Profile</button>
