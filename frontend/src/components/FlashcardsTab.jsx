@@ -69,6 +69,9 @@ function FlashcardsTab({ token, ui, onTestsChanged }) {
         onBack={() => {
           setPreselectCard(null);
           setOpenTestId(null);
+          loadTests(true).catch((err) =>
+            ui.setError(err.message || "Failed to reload tests")
+          );
         }}
         onChanged={() => loadTests(true)}
       />

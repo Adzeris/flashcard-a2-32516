@@ -83,7 +83,7 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
         <div>
           <h1>Guest Study Session</h1>
           <p>
-            Temporary mode. No saved user history, no admin access. Expires at{" "}
+            Temporary mode. No saved account history. Expires at{" "}
             <strong>{formatDate(session?.expires_at)}</strong>.
           </p>
         </div>

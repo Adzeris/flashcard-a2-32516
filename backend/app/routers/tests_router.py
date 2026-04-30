@@ -9,12 +9,11 @@ from ..schemas import TestCreate, TestOut, TestUpdate
 router = APIRouter(prefix="/api/tests", tags=["Tests"])
 
 
-def _to_test_out(db: Session, test: Test) -> TestOut:
-    count = (
-        db.query(Flashcard)
-        .filter(Flashcard.user_id == test.user_id, Flashcard.category == test.name)
-        .count()
-    )
+def _to_test_out(db: Session, test: Test, current_user: User) -> TestOut:
+    q = db.query(Flashcard).filter(Flashcard.category == test.name)
+    if current_user.role != "admin":
+        q = q.filter(Flashcard.user_id == test.user_id)
+    count = q.count()
     return TestOut(
         id=test.id,
         user_id=test.user_id,
@@ -32,7 +31,7 @@ def list_tests(
     items = (
         db.query(Test).filter(Test.user_id == current_user.id).order_by(Test.id.asc()).all()
     )
-    return [_to_test_out(db, item) for item in items]
+    return [_to_test_out(db, item, current_user) for item in items]
 
 
 @router.post("", response_model=TestOut, status_code=201)
@@ -54,7 +53,7 @@ def create_test(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _to_test_out(db, item)
+    return _to_test_out(db, item, current_user)
 
 
 @router.put("/{test_id}", response_model=TestOut)
@@ -91,7 +90,7 @@ def update_test(
         )
     db.commit()
     db.refresh(item)
-    return _to_test_out(db, item)
+    return _to_test_out(db, item, current_user)
 
 
 @router.delete("/{test_id}")
