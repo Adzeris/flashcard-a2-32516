@@ -1,11 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import DifficultyPicker from "./DifficultyPicker";
 import StudyPanel from "./StudyPanel";
 import { authRequest } from "../api";
 
 const emptyForm = { question: "", answer: "", difficulty: 1 };
 
-// CRUD form + live-search list + study panel for a single test.
+function scrollDeckListToBottom(el) {
+  if (!el) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+  });
+}
+
+// Stacked deck UI: practice/exam, horizontal create form, full-width searchable list.
 // Live search is debounced 200ms so we don't hammer the backend on every keystroke.
 // preselectCard: optional card to open in the editor (e.g. jumped from global search).
 function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPreselectConsumed }) {
@@ -13,6 +22,8 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
   const [flashcards, setFlashcards] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const deckListRef = useRef(null);
+  const pendingScrollBottomRef = useRef(false);
 
   // Debounced fetch on search change. Cleared whenever the test switches
   // so we never display stale results from another test briefly.
@@ -35,6 +46,12 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
     setSearch("");
   }, [test?.id]);
 
+  useEffect(() => {
+    if (!pendingScrollBottomRef.current) return;
+    pendingScrollBottomRef.current = false;
+    scrollDeckListToBottom(deckListRef.current);
+  }, [flashcards]);
+
   async function reload() {
     const params = new URLSearchParams({ test: test.name });
     if (search.trim()) params.set("search", search.trim());
@@ -44,6 +61,7 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
 
   async function handleSubmit(event) {
     event.preventDefault();
+    const isCreate = !editingId;
     const payload = {
       question: form.question.trim(),
       answer: form.answer.trim(),
@@ -68,6 +86,9 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
       await reload();
       onChanged?.();
     }, editingId ? "Flashcard updated" : "Flashcard created");
+    if (isCreate) {
+      pendingScrollBottomRef.current = true;
+    }
   }
 
   function startEdit(card) {
@@ -115,6 +136,8 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
     onChanged?.();
   }
 
+  const workspaceId = test?.id != null ? String(test.id) : "test";
+
   return (
     <>
       <section className="card test-workspace-header">
@@ -125,35 +148,45 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
         <button type="button" onClick={onBack}>Back to Test List</button>
       </section>
 
-      <section className="panel-grid">
-        <div className="card">
+      <div className="deck-workspace-stack">
+        <section className="card deck-workspace-study">
+          <StudyPanel
+            panelTitle="Practice and Exam"
+            sourceCards={flashcards}
+            onMarkAnswer={markExamAnswer}
+          />
+        </section>
+
+        <section className="card deck-workspace-create">
           <h2>{editingId ? `Edit ${test.name}` : `Create in ${test.name}`}</h2>
-          <form onSubmit={handleSubmit} className="form-grid">
-            <label>
-              Question
-              <textarea
-                value={form.question}
-                onChange={(e) => setForm((prev) => ({ ...prev, question: e.target.value }))}
-                required
-              />
-            </label>
-            <label>
-              Answer
-              <textarea
-                value={form.answer}
-                onChange={(e) => setForm((prev) => ({ ...prev, answer: e.target.value }))}
-                required
-              />
-            </label>
-            <label>
+          <form onSubmit={handleSubmit} className="deck-create-form">
+            <div className="deck-create-pair">
+              <label>
+                Question
+                <textarea
+                  value={form.question}
+                  onChange={(e) => setForm((prev) => ({ ...prev, question: e.target.value }))}
+                  required
+                />
+              </label>
+              <label>
+                Answer
+                <textarea
+                  value={form.answer}
+                  onChange={(e) => setForm((prev) => ({ ...prev, answer: e.target.value }))}
+                  required
+                />
+              </label>
+            </div>
+            <label className="deck-create-difficulty">
               Difficulty (1-5)
               <DifficultyPicker
                 value={form.difficulty}
                 onChange={(level) => setForm((prev) => ({ ...prev, difficulty: level }))}
-                name="user-form"
+                name={`test-form-${workspaceId}`}
               />
             </label>
-            <div className="row">
+            <div className="row deck-create-actions">
               <button type="submit" disabled={ui.loading}>
                 {editingId ? "Update" : "Create"}
               </button>
@@ -170,16 +203,19 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
               )}
             </div>
           </form>
-        </div>
+        </section>
 
-        <div className="card">
+        <section className="card deck-workspace-deck">
           <h2>{test.name} Questions</h2>
-          <input
-            placeholder="Live search by question or answer..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="list list-scroll">
+          <div className="deck-workspace-search">
+            <input
+              placeholder="Live search by question or answer..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Live search by question or answer"
+            />
+          </div>
+          <div ref={deckListRef} className="list list-scroll deck-workspace-list">
             {flashcards.length === 0 && <p>No flashcards found.</p>}
             {flashcards.map((card) => (
               <article key={card.id} className="list-item">
@@ -195,16 +231,8 @@ function TestWorkspace({ token, test, onBack, onChanged, ui, preselectCard, onPr
               </article>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <StudyPanel
-          panelTitle="Practice and Exam"
-          sourceCards={flashcards}
-          onMarkAnswer={markExamAnswer}
-        />
-      </section>
+        </section>
+      </div>
     </>
   );
 }

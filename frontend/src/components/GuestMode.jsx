@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import DifficultyPicker from "./DifficultyPicker";
 import StudyPanel from "./StudyPanel";
 import { apiRequest } from "../api";
@@ -7,11 +7,22 @@ import { formatDate } from "../utils/format";
 
 const emptyForm = { question: "", answer: "", difficulty: 1 };
 
+function scrollDeckListToBottom(el) {
+  if (!el) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+  });
+}
+
 // Whole guest experience: a temporary shared deck that anyone with the
 // ?guest=<token> link can edit until the session expires. No saved history.
 function GuestMode({ token, session, setSession, onLeave, ui }) {
   const cards = session?.flashcards || [];
   const shareUrl = `${window.location.origin}${window.location.pathname}?guest=${token}`;
+  const deckListRef = useRef(null);
+  const pendingScrollBottomRef = useRef(false);
 
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
@@ -19,6 +30,12 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
   useEffect(() => {
     writeGuestTokenToUrl(token);
   }, [token]);
+
+  useEffect(() => {
+    if (!pendingScrollBottomRef.current) return;
+    pendingScrollBottomRef.current = false;
+    scrollDeckListToBottom(deckListRef.current);
+  }, [cards]);
 
   // Single PUT replaces the entire flashcards JSON for this session - keeps
   // the backend dumb and avoids per-card endpoints just for guest mode.
@@ -37,6 +54,7 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    const isCreate = !editingId;
     const payload = {
       id: editingId || crypto.randomUUID(),
       question: form.question.trim(),
@@ -50,6 +68,9 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
     await saveCards(nextCards, editingId ? "Guest card updated" : "Guest card created");
     setForm(emptyForm);
     setEditingId("");
+    if (isCreate) {
+      pendingScrollBottomRef.current = true;
+    }
   }
 
   function startEdit(card) {
@@ -102,10 +123,14 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
       {ui.error && <p className="error">{ui.error}</p>}
       {ui.success && <p className="success">{ui.success}</p>}
 
-      <section className="panel-grid">
-        <div className="card">
-          <h2>{editingId ? "Edit Guest Flashcard" : "Create Guest Flashcard"}</h2>
-          <form onSubmit={handleSubmit} className="form-grid">
+      <section className="card deck-workspace-study">
+        <StudyPanel panelTitle="Guest Practice and Exam" sourceCards={cards} isGuestMode />
+      </section>
+
+      <section className="card deck-workspace-create">
+        <h2>{editingId ? "Edit Guest Flashcard" : "Create Guest Flashcard"}</h2>
+        <form onSubmit={handleSubmit} className="deck-create-form">
+          <div className="deck-create-pair">
             <label>
               Question
               <textarea
@@ -122,54 +147,50 @@ function GuestMode({ token, session, setSession, onLeave, ui }) {
                 required
               />
             </label>
-            <label>
-              Difficulty (1-5)
-              <DifficultyPicker
-                value={form.difficulty}
-                onChange={(level) => setForm((prev) => ({ ...prev, difficulty: level }))}
-                name="guest-form"
-              />
-            </label>
-            <div className="row">
-              <button type="submit" disabled={ui.loading}>
-                {editingId ? "Update" : "Create"}
-              </button>
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingId("");
-                    setForm(emptyForm);
-                  }}
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-
-        <div className="card">
-          <h2>Guest Flashcards</h2>
-          <div className="list list-scroll">
-            {cards.length === 0 && <p>No guest cards yet.</p>}
-            {cards.map((card) => (
-              <article key={card.id} className="list-item">
-                <h3>{card.question}</h3>
-                <p>{card.answer}</p>
-                <p className="meta">Difficulty {card.difficulty}</p>
-                <div className="row">
-                  <button type="button" onClick={() => startEdit(card)}>Edit</button>
-                  <button type="button" onClick={() => handleDelete(card.id)}>Delete</button>
-                </div>
-              </article>
-            ))}
           </div>
-        </div>
+          <label className="deck-create-difficulty">
+            Difficulty (1-5)
+            <DifficultyPicker
+              value={form.difficulty}
+              onChange={(level) => setForm((prev) => ({ ...prev, difficulty: level }))}
+              name="guest-form"
+            />
+          </label>
+          <div className="row deck-create-actions">
+            <button type="submit" disabled={ui.loading}>
+              {editingId ? "Update" : "Create"}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingId("");
+                  setForm(emptyForm);
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
       </section>
 
-      <section className="card">
-        <StudyPanel panelTitle="Guest Practice and Exam" sourceCards={cards} isGuestMode />
+      <section className="card deck-workspace-deck">
+        <h2>Questions</h2>
+        <div ref={deckListRef} className="list list-scroll deck-workspace-list">
+          {cards.length === 0 && <p>No Cards Created ....... Yet</p>}
+          {cards.map((card) => (
+            <article key={card.id} className="list-item">
+              <h3>{card.question}</h3>
+              <p>{card.answer}</p>
+              <p className="meta">Difficulty {card.difficulty}</p>
+              <div className="row">
+                <button type="button" onClick={() => startEdit(card)}>Edit</button>
+                <button type="button" onClick={() => handleDelete(card.id)}>Delete</button>
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
     </div>
   );

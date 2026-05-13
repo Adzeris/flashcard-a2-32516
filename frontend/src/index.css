@@ -35,6 +35,18 @@ body {
   width: min(620px, 96vw);
 }
 
+.auth-switch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.auth-switch-bar .auth-guest-button {
+  margin-left: auto;
+}
+
 .app-header {
   display: flex;
   justify-content: space-between;
@@ -64,7 +76,26 @@ body {
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 1rem;
+  gap: 1.35rem;
+}
+
+/* Panel columns share one row height. Let the questions list fill the bottom of
+   its card (no dead band); scroll inside the list. overflow:hidden + :has so the
+   row height does not follow every flashcard when the left column is shorter. */
+.panel-grid > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-grid > .card:has(.list-scroll) {
+  overflow: hidden;
+}
+
+.panel-grid .list.list-scroll {
+  flex: 1 1 0%;
+  min-height: 0;
+  max-height: none;
 }
 
 /* Guest mode: extra breathing room between header, share strip, columns, study panel */
@@ -89,47 +120,84 @@ body {
   margin-bottom: 1rem;
 }
 
-.guest-layout > .panel-grid {
-  gap: 1.35rem;
-  margin-bottom: 1.5rem;
+/* Space between test title/back bar and the Practice & Exam card (logged-in workspace). */
+.card.test-workspace-header {
+  margin-bottom: 1.35rem;
 }
 
-.guest-layout .panel-grid .card {
-  padding: 1.2rem 1.25rem;
+/* Stacked deck UI: study → horizontal create → scrollable list (guest + logged-in test view). */
+.guest-layout .deck-workspace-study,
+.guest-layout .deck-workspace-create,
+.guest-layout .deck-workspace-deck,
+.deck-workspace-stack .deck-workspace-study,
+.deck-workspace-stack .deck-workspace-create,
+.deck-workspace-stack .deck-workspace-deck {
+  margin-bottom: 1.35rem;
+  padding: 1.15rem 1.25rem;
 }
 
-.guest-layout .panel-grid .form-grid {
-  gap: 1.05rem;
+.guest-layout .deck-workspace-study h2,
+.guest-layout .deck-workspace-deck h2,
+.deck-workspace-stack .deck-workspace-study h2,
+.deck-workspace-stack .deck-workspace-deck h2 {
+  margin-bottom: 1rem;
 }
 
-.guest-layout .panel-grid .form-grid label {
-  gap: 0.55rem;
+.deck-workspace-search {
+  margin-bottom: 0.65rem;
 }
 
-.guest-layout .panel-grid textarea {
+.deck-workspace-search input {
+  width: 100%;
+}
+
+.deck-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.deck-create-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.deck-create-pair label {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.88rem;
+  color: #dbe7f7;
+}
+
+.deck-create-form .deck-create-pair textarea {
   min-height: 100px;
 }
 
-.guest-layout .panel-grid .form-grid > .row {
-  margin-top: 0.4rem;
+.deck-create-difficulty {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.deck-create-actions {
+  margin-top: 0.15rem;
   gap: 0.65rem;
 }
 
-.guest-layout .panel-grid .list.list-scroll {
+.deck-workspace-list {
   margin-top: 0.35rem;
 }
 
-.guest-layout .panel-grid .list-scroll > .hint,
-.guest-layout .panel-grid .list-scroll > p:first-child {
+.deck-workspace-list > p:first-child {
   margin: 0.35rem 0 0.15rem;
 }
 
-.guest-layout > section.card:last-of-type {
-  padding: 1.2rem 1.25rem;
-}
-
-.guest-layout > section.card:last-of-type h2 {
-  margin-bottom: 1rem;
+@media (max-width: 768px) {
+  .deck-create-pair {
+    grid-template-columns: 1fr;
+  }
 }
 
 .card {
@@ -312,7 +380,10 @@ button.active,
 }
 
 .list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
   gap: 0.55rem;
   margin-top: 0.75rem;
 }
@@ -323,7 +394,11 @@ button.active,
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0.35rem;
+  padding-bottom: 0.85rem;
+  scroll-padding-bottom: 0.75rem;
   align-content: start;
+  min-width: 0;
+  width: 100%;
 }
 
 .list-scroll::-webkit-scrollbar {
@@ -336,6 +411,10 @@ button.active,
 }
 
 .list-item {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid rgba(55, 65, 81, 0.85);
   border-radius: 0.75rem;
   padding: 0.65rem;
@@ -395,8 +474,8 @@ code {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.65rem 0.9rem;
-  margin-bottom: 0.5rem;
+  gap: 0.85rem 1.5rem;
+  margin-bottom: 0.65rem;
 }
 
 .study-field {

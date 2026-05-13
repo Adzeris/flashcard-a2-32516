@@ -26,21 +26,25 @@ function AuthScreen({ loading, error, success, onLogin, onRegister, onGuest }) {
       <div className="card auth-card">
         <h1>Flashcard Learning App v2</h1>
 
-        <div className="switch-row">
-          <button
-            className={mode === "login" ? "active" : ""}
-            onClick={() => setMode("login")}
-          >
-            Login
-          </button>
-          <button
-            className={mode === "register" ? "active" : ""}
-            onClick={() => setMode("register")}
-          >
-            Register
-          </button>
-          <button type="button" onClick={onGuest}>
-            Continue as Guest
+        <div className="auth-switch-bar">
+          <div className="switch-row">
+            <button
+              type="button"
+              className={mode === "login" ? "active" : ""}
+              onClick={() => setMode("login")}
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              className={mode === "register" ? "active" : ""}
+              onClick={() => setMode("register")}
+            >
+              Register
+            </button>
+          </div>
+          <button type="button" className="auth-guest-button" onClick={onGuest}>
+            Guest Mode
           </button>
         </div>
 
